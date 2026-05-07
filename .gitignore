@@ -1,0 +1,9 @@
+# Compiled files
+out/
+*.class
+
+# VS Code settings
+.vscode/
+
+# Runtime data files
+*.csv
