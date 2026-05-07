@@ -1,8 +1,8 @@
 import java.util.ArrayList;
 
 public class ClinicSystem {
-    private ArrayList<Patient>     patients;
-    private ArrayList<Doctor>      doctors;
+    private ArrayList<Patient> patients;
+    private ArrayList<Doctor> doctors;
     private ArrayList<Appointment> allAppointments;
     private int nextPatientId;
 
@@ -13,7 +13,7 @@ public class ClinicSystem {
         doctors.add(new Doctor("Dr. Khaled Nour",   "General Practice"));
         doctors.add(new Doctor("Dr. Mona El-Sayed", "Pediatrics"));
 
-        patients        = FileManager.loadPatients();
+        patients = FileManager.loadPatients();
         allAppointments = FileManager.loadAppointments(patients, doctors);
 
         nextPatientId = 1;
@@ -21,11 +21,10 @@ public class ClinicSystem {
             if (p.getId() >= nextPatientId)
                 nextPatientId = p.getId() + 1;
     }
-
     /** Returns null on success, error message on failure. */
     public String addPatient(String name, int age, String contact) {
         if (name == null || name.trim().isEmpty()) return "Name cannot be empty.";
-        if (age < 0) return "Age must be a positive number.";
+        if (age <= 0) return "Age must be more than 0.";
         if (contact == null || contact.trim().isEmpty()) return "Contact info cannot be empty.";
         Patient p = new Patient(nextPatientId++, name.trim(), age, contact.trim());
         patients.add(p);
