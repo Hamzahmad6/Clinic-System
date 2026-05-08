@@ -1,103 +1,242 @@
-import java.util.ArrayList;
+import java.util.ArrayList; // Import ArrayList to store dynamic lists of patients, doctors, and appointments
 
-public class ClinicSystem {
-    private ArrayList<Patient> patients;
-    private ArrayList<Doctor> doctors;
-    private ArrayList<Appointment> allAppointments;
-    private int nextPatientId;
+public class ClinicSystem { // Main system class that controls all clinic operations
 
-    public ClinicSystem() {
-        doctors = new ArrayList<>();
-        doctors.add(new Doctor("Dr. Ahmed Hassan",  "Cardiology"));
-        doctors.add(new Doctor("Dr. Sara Mostafa",  "Dermatology"));
-        doctors.add(new Doctor("Dr. Khaled Nour",   "General Practice"));
-        doctors.add(new Doctor("Dr. Mona El-Sayed", "Pediatrics"));
+    private ArrayList<Patient> patients; // List to store all patients in the system
+    private ArrayList<Doctor> doctors; // List to store all doctors in the system
+    private ArrayList<Appointment> allAppointments; // List to store all appointments in the system
 
-        patients = FileManager.loadPatients();
-        allAppointments = FileManager.loadAppointments(patients, doctors);
+    private int nextPatientId; // Counter to generate unique patient IDs
 
-        nextPatientId = 1;
-        for (Patient p : patients)
-            if (p.getId() >= nextPatientId)
-                nextPatientId = p.getId() + 1;
+    public ClinicSystem() { // Constructor: runs when system starts
+
+        doctors = new ArrayList<>(); // Initialize doctors list
+
+        // Add predefined doctors to the system
+        doctors.add(new Doctor("Dr. Ahmed Hassan", "Cardiology")); // Doctor 1
+        doctors.add(new Doctor("Dr. Sara Mostafa", "Dermatology")); // Doctor 2
+        doctors.add(new Doctor("Dr. Khaled Nour", "General")); // Doctor 3
+        doctors.add(new Doctor("Dr. Mona El-Sayed", "Pediatrics")); // Doctor 4
+
+        patients = FileManager.loadPatients(); // Load saved patients from file
+        allAppointments = FileManager.loadAppointments(patients, doctors); // Load saved appointments and link them
+
+        nextPatientId = 1; // Start patient ID counter from 1
+
+        // Find highest existing ID to avoid duplicates
+        for (Patient p : patients) { // Loop through all loaded patients
+
+            if (p.getId() >= nextPatientId) { // If patient ID is bigger or equal
+                nextPatientId = p.getId() + 1; // Set next ID to be safe
+            }
+        }
     }
-    /** Returns null on success, error message on failure. */
+
+    // ─────────────────────────────────────────────
+    // ADD PATIENT
+    // Returns null if success, error message otherwise
+    // ─────────────────────────────────────────────
     public String addPatient(String name, int age, String contact) {
-        if (name == null || name.trim().isEmpty()) return "Name cannot be empty.";
-        if (age <= 0) return "Age must be more than 0.";
-        if (contact == null || contact.trim().isEmpty()) return "Contact info cannot be empty.";
-        Patient p = new Patient(nextPatientId++, name.trim(), age, contact.trim());
-        patients.add(p);
-        FileManager.savePatients(patients);
-        return null;
+
+        if (name == null || name.trim().isEmpty()) { // Check if name is empty
+            return "Name cannot be empty."; // Return error message
+        }
+
+        if (age <= 0) { // Check if age is valid
+            return "Age must be more than 0."; // Return error
+        }
+
+        if (contact == null || contact.trim().isEmpty()) { // Check contact info
+            return "Contact info cannot be empty."; // Return error
+        }
+
+        // Check for duplicate patient using contact info
+        for (Patient p : patients) { // Loop through patients
+
+            if (p.getContactInfo().equals(contact.trim())) { // If contact already exists
+                return "Patient already exists with this contact."; // Stop duplication
+            }
+        }
+
+        // Create new patient object
+        Patient patient = new Patient(
+                nextPatientId++, // Assign unique ID then increment counter
+                name.trim(), // Remove extra spaces
+                age, // Store age
+                contact.trim() // Clean contact
+        );
+
+        patients.add(patient); // Add patient to list
+
+        FileManager.savePatients(patients); // Save updated list to file
+
+        return null; // Success (no error)
     }
 
-    /** Returns null on success, error message on failure. */
+    // ─────────────────────────────────────────────
+    // BOOK APPOINTMENT
+    // ─────────────────────────────────────────────
     public String bookAppointment(int patientId, int doctorIndex, String dateTime) {
-        Patient patient = findPatientById(patientId);
-        if (patient == null) return "Patient not found.";
-        if (doctorIndex < 0 || doctorIndex >= doctors.size()) return "Invalid doctor selection.";
-        if (dateTime == null || dateTime.trim().isEmpty()) return "Date/time cannot be empty.";
-        Doctor doctor = doctors.get(doctorIndex);
-        if (doctor.isBusy(dateTime.trim())) return "Doctor is already booked at that time.";
-        Appointment appt = new Appointment(patient.getId(), patient.getName(), doctor, dateTime.trim());
-        allAppointments.add(appt);
-        doctor.addAppointment(appt);
-        patient.addVisit(appt);
-        FileManager.saveAppointments(allAppointments);
-        return null;
+
+        Patient patient = findPatientById(patientId); // Search for patient
+
+        if (patient == null) { // If patient not found
+            return "Patient not found."; // Error message
+        }
+
+        if (doctorIndex < 0 || doctorIndex >= doctors.size()) { // Validate doctor index
+            return "Invalid doctor selection."; // Error message
+        }
+
+        if (dateTime == null || dateTime.trim().isEmpty()) { // Validate time
+            return "Date/time cannot be empty."; // Error message
+        }
+
+        Doctor doctor = doctors.get(doctorIndex); // Get selected doctor
+
+        if (doctor.isBusy(dateTime.trim())) { // Check if doctor is already booked
+            return "Doctor is already booked at that time."; // Conflict error
+        }
+
+        // Create new appointment
+        Appointment appointment = new Appointment(
+                patient.getId(), // patient ID
+                patient.getName(), // patient name
+                doctor, // doctor object
+                dateTime.trim() // appointment time
+        );
+
+        allAppointments.add(appointment); // Add to global list
+
+        doctor.addAppointment(appointment); // Add to doctor schedule
+
+        patient.addVisit(appointment); // Add to patient history
+
+        FileManager.saveAppointments(allAppointments); // Save to file
+
+        return null; // Success
     }
 
-    /** Returns null on success, error message on failure. */
-    public String cancelAppointment(int apptId) {
-        Appointment appt = findAppointmentById(apptId);
-        if (appt == null) return "Appointment not found.";
-        if (appt.getStatus().equals("Cancelled")) return "Already cancelled.";
-        appt.setStatus("Cancelled");
-        FileManager.saveAppointments(allAppointments);
-        return null;
+    // ─────────────────────────────────────────────
+    // CANCEL APPOINTMENT
+    // ─────────────────────────────────────────────
+    public String cancelAppointment(int appointmentId) {
+
+        Appointment appointment = findAppointmentById(appointmentId); // Find appointment
+
+        if (appointment == null) { // If not found
+            return "Appointment not found."; // Error
+        }
+
+        if (appointment.getStatus().equals("Cancelled")) { // Already cancelled check
+            return "Already cancelled."; // Error
+        }
+
+        appointment.setStatus("Cancelled"); // Update status
+
+        appointment.getDoctor().removeAppointment(appointment); // Remove from doctor schedule
+
+        FileManager.saveAppointments(allAppointments); // Save changes
+
+        return null; // Success
     }
 
-    /** Returns null on success, error message on failure. */
-    public String rescheduleAppointment(int apptId, String newDateTime) {
-        Appointment appt = findAppointmentById(apptId);
-        if (appt == null) return "Appointment not found.";
-        if (appt.getStatus().equals("Cancelled")) return "Cannot reschedule a cancelled appointment.";
-        if (newDateTime == null || newDateTime.trim().isEmpty()) return "New date/time cannot be empty.";
-        if (appt.getDoctor().isBusy(newDateTime.trim())) return "Doctor is busy at that time.";
-        appt.setDateTime(newDateTime.trim());
-        FileManager.saveAppointments(allAppointments);
-        return null;
+    // ─────────────────────────────────────────────
+    // RESCHEDULE APPOINTMENT
+    // ─────────────────────────────────────────────
+    public String rescheduleAppointment(int appointmentId, String newDateTime) {
+
+        Appointment appointment = findAppointmentById(appointmentId); // Find appointment
+
+        if (appointment == null) { // If not found
+            return "Appointment not found."; // Error
+        }
+
+        if (appointment.getStatus().equals("Cancelled")) { // Cannot reschedule cancelled
+            return "Cannot reschedule a cancelled appointment."; // Error
+        }
+
+        if (newDateTime == null || newDateTime.trim().isEmpty()) { // Validate new time
+            return "New date/time cannot be empty."; // Error
+        }
+
+        // Check if doctor is already busy at new time (excluding same appointment)
+        for (Appointment a : appointment.getDoctor().getAppointments()) {
+
+            if (a.getStatus().equals("Scheduled") &&
+                a.getDateTime().equals(newDateTime.trim()) &&
+                a.getAppointmentId() != appointmentId) {
+
+                return "Doctor is busy at that time."; // Conflict
+            }
+        }
+
+        appointment.setDateTime(newDateTime.trim()); // Update time
+
+        FileManager.saveAppointments(allAppointments); // Save changes
+
+        return null; // Success
     }
 
-    public ArrayList<Patient>     getPatients()        { return patients; }
-    public ArrayList<Doctor>      getDoctors()         { return doctors; }
-    public ArrayList<Appointment> getAllAppointments()  { return allAppointments; }
+    // ─────────────────────────────────────────────
+    // GETTERS
+    // ─────────────────────────────────────────────
+    public ArrayList<Patient> getPatients() {
+        return patients; // Return patient list
+    }
 
+    public ArrayList<Doctor> getDoctors() {
+        return doctors; // Return doctor list
+    }
+
+    public ArrayList<Appointment> getAllAppointments() {
+        return allAppointments; // Return all appointments
+    }
+
+    // ─────────────────────────────────────────────
+    // FILTER: SCHEDULED ONLY
+    // ─────────────────────────────────────────────
     public ArrayList<Appointment> getScheduledAppointments() {
-        ArrayList<Appointment> list = new ArrayList<>();
-        for (Appointment a : allAppointments)
-            if (a.getStatus().equals("Scheduled")) list.add(a);
-        return list;
+
+        ArrayList<Appointment> scheduled = new ArrayList<>(); // Create list
+
+        for (Appointment a : allAppointments) { // Loop all appointments
+
+            if (a.getStatus().equals("Scheduled")) { // Filter only scheduled
+                scheduled.add(a); // Add to result list
+            }
+        }
+
+        return scheduled; // Return filtered list
     }
 
-    public ArrayList<Appointment> getAppointmentsByDoctor(int doctorIndex) {
-        if (doctorIndex < 0 || doctorIndex >= doctors.size()) return new ArrayList<>();
-        ArrayList<Appointment> list = new ArrayList<>();
-        for (Appointment a : doctors.get(doctorIndex).getAppointments())
-            if (a.getStatus().equals("Scheduled")) list.add(a);
-        return list;
-    }
-
+    // ─────────────────────────────────────────────
+    // FIND PATIENT BY ID
+    // ─────────────────────────────────────────────
     private Patient findPatientById(int id) {
-        for (Patient p : patients)
-            if (p.getId() == id) return p;
-        return null;
+
+        for (Patient p : patients) { // Loop patients
+
+            if (p.getId() == id) { // Match ID
+                return p; // Return patient
+            }
+        }
+
+        return null; // Not found
     }
 
+    // ─────────────────────────────────────────────
+    // FIND APPOINTMENT BY ID
+    // ─────────────────────────────────────────────
     private Appointment findAppointmentById(int id) {
-        for (Appointment a : allAppointments)
-            if (a.getAppointmentId() == id) return a;
-        return null;
+
+        for (Appointment a : allAppointments) { // Loop appointments
+
+            if (a.getAppointmentId() == id) { // Match ID
+                return a; // Return appointment
+            }
+        }
+
+        return null; // Not found
     }
 }

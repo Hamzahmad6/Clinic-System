@@ -1,6 +1,7 @@
 import java.util.ArrayList;
 
 public class Patient {
+
     private int id;
     private String name;
     private int age;
@@ -15,32 +16,16 @@ public class Patient {
         this.visitHistory = new ArrayList<>();
     }
 
-    public void addVisit(Appointment appointment) {
-        visitHistory.add(appointment);
+    public void addVisit(Appointment a) {
+        visitHistory.add(a);
     }
 
-    public void printVisitHistory() {
-        if (visitHistory.isEmpty()) {
-            System.out.println("  No visits recorded.");
-            return;
-        }
-        for (Appointment a : visitHistory) {
-            System.out.println("  - " + a.getSummary());
-        }
-    }
+    public int getId() { return id; }
+    public String getName() { return name; }
+    public int getAge() { return age; }
+    public String getContactInfo() { return contactInfo; }
 
-    public int getId()              { return id; }
-    public String getName()         { return name; }
-    public int getAge()             { return age; }
-    public String getContactInfo()  { return contactInfo; }
-    public ArrayList<Appointment> getVisitHistory() { return visitHistory; }
-
-    public void setName(String name)           { this.name = name; }
-    public void setAge(int age)                { this.age = age; }
-    public void setContactInfo(String c)       { this.contactInfo = c; }
-
-    @Override
-    public String toString() {
-        return "[ID: " + id + "] " + name + " | Age: " + age + " | Contact: " + contactInfo;
+    public ArrayList<Appointment> getVisitHistory() {
+        return visitHistory;
     }
 }
