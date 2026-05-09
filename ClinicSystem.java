@@ -1,7 +1,7 @@
 import java.util.ArrayList; // Import ArrayList to store dynamic lists of patients, doctors, and appointments
 
 public class ClinicSystem { // Main system class that controls all clinic operations
-
+    
     private ArrayList<Patient> patients; // List to store all patients in the system
     private ArrayList<Doctor> doctors; // List to store all doctors in the system
     private ArrayList<Appointment> allAppointments; // List to store all appointments in the system
