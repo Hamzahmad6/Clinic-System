@@ -20,7 +20,9 @@ public class Patient {
         visitHistory.add(a);
     }
 
-    public int getId() { return id; }
+    public int getId() {
+        return id; 
+    }
     public String getName() { return name; }
     public int getAge() { return age; }
     public String getContactInfo() { return contactInfo; }
