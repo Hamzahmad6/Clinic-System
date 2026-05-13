@@ -6,7 +6,7 @@ public class ClinicSystem {
     private int nextPatientId;
 
     public ClinicSystem() {
-
+        // doctors
         doctors = new ArrayList<>();
         doctors.add(new Doctor("Dr. Ahmed Hassan", "Cardiology"));
         doctors.add(new Doctor("Dr. Sara Mostafa", "Dermatology"));
