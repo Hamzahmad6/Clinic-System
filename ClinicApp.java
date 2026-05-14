@@ -9,7 +9,6 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.*;
 import javafx.stage.*;
-import javafx.util.Callback;
 
 import java.util.ArrayList;
 
@@ -22,13 +21,14 @@ public class ClinicApp extends Application {
     private ObservableList<AppointmentRow> appointmentRows = FXCollections.observableArrayList();
 
     // ─── Colour palette ───────────────────────────────────────────────────
-    private static final String BG        = "#0f1923";
-    private static final String CARD      = "#162130";
-    private static final String ACCENT    = "#00bfa5";
-    private static final String ACCENT2   = "#e53935";
-    private static final String TEXT      = "#e8f0f7";
-    private static final String SUBTEXT   = "#7a99b0";
-    private static final String BORDER    = "#1e3045";
+    private static final String BG       = "#0f1923";
+    private static final String CARD     = "#162130";
+    private static final String ACCENT   = "#00bfa5";
+    private static final String ACCENT2  = "#e53935";
+    private static final String TEXT     = "#e8f0f7";
+    private static final String SUBTEXT  = "#7a99b0";
+    private static final String BORDER   = "#1e3045";
+
     private static final String BTN_STYLE =
         "-fx-background-color:" + ACCENT + ";" +
         "-fx-text-fill:#0f1923;" +
@@ -77,6 +77,17 @@ public class ClinicApp extends Application {
         "-fx-text-fill:" + TEXT + ";" +
         "-fx-table-cell-border-color:" + BORDER + ";";
 
+    // ─── Dashboard stat labels (kept as fields so they can be refreshed) ──
+    // BUG FIX #9: The original buildDashboard() used a Supplier<String> lambda
+    // that was called only ONCE at build time and then discarded. After adding
+    // a patient or booking an appointment the numbers on the dashboard never
+    // changed. We now keep references to the Label nodes and call
+    // refreshDashboard() every time data changes.
+    private Label statPatients;
+    private Label statScheduled;
+    private Label statAllAppts;
+    private Label statDoctors;
+
     // ──────────────────────────────────────────────────────────────────────
     @Override
     public void start(Stage stage) {
@@ -86,21 +97,18 @@ public class ClinicApp extends Application {
 
         TabPane tabs = new TabPane();
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-        tabs.setStyle("-fx-background-color:" + BG + ";");
-
-        tabs.getTabs().addAll(
-            makeTab("🏠  Dashboard",    buildDashboard()),
-            makeTab("👤  Patients",      buildPatientsTab()),
-            makeTab("📅  Book",          buildBookTab()),
-            makeTab("📋  Appointments",  buildAppointmentsTab()),
-            makeTab("🔍  History",       buildHistoryTab())
-        );
-
-        // Tab style
         tabs.setStyle(
             "-fx-tab-min-width:140;" +
             "-fx-background-color:" + BG + ";" +
             "-fx-focus-color:transparent;"
+        );
+
+        tabs.getTabs().addAll(
+            makeTab("🏠  Dashboard",   buildDashboard()),
+            makeTab("👤  Patients",     buildPatientsTab()),
+            makeTab("📅  Book",         buildBookTab()),
+            makeTab("📋  Appointments", buildAppointmentsTab()),
+            makeTab("🔍  History",      buildHistoryTab())
         );
 
         Scene scene = new Scene(tabs, 1100, 720);
@@ -129,13 +137,22 @@ public class ClinicApp extends Application {
         Label sub = new Label("Your all-in-one patient & appointment manager");
         sub.setStyle("-fx-font-size:14px;-fx-text-fill:" + SUBTEXT + ";");
 
+        // BUG FIX #9 continued: create the stat cards with mutable Labels
         HBox cards = new HBox(20);
-        cards.getChildren().addAll(
-            statCard("Total Patients",     () -> String.valueOf(clinic.getPatients().size()),        "👤", ACCENT),
-            statCard("Scheduled",          () -> String.valueOf(clinic.getScheduledAppointments().size()), "📅", "#42a5f5"),
-            statCard("Total Appointments", () -> String.valueOf(clinic.getAllAppointments().size()),  "📋", "#ab47bc"),
-            statCard("Doctors",            () -> String.valueOf(clinic.getDoctors().size()),         "🩺", "#ff7043")
-        );
+        VBox cardPatients  = buildStatCard("👤", "Total Patients",     "#00bfa5");
+        VBox cardScheduled = buildStatCard("📅", "Scheduled",          "#42a5f5");
+        VBox cardAllAppts  = buildStatCard("📋", "Total Appointments",  "#ab47bc");
+        VBox cardDoctors   = buildStatCard("🩺", "Doctors",             "#ff7043");
+
+        // The first child of each card is the icon+value label
+        statPatients  = (Label) cardPatients.getChildren().get(0);
+        statScheduled = (Label) cardScheduled.getChildren().get(0);
+        statAllAppts  = (Label) cardAllAppts.getChildren().get(0);
+        statDoctors   = (Label) cardDoctors.getChildren().get(0);
+
+        refreshDashboard();
+
+        cards.getChildren().addAll(cardPatients, cardScheduled, cardAllAppts, cardDoctors);
 
         Label docTitle = new Label("Our Doctors");
         docTitle.setStyle("-fx-font-size:18px;-fx-font-weight:bold;-fx-text-fill:" + TEXT + ";");
@@ -144,7 +161,12 @@ public class ClinicApp extends Application {
         for (Doctor d : clinic.getDoctors()) {
             VBox card = new VBox(6);
             card.setPadding(new Insets(16));
-            card.setStyle("-fx-background-color:" + CARD + ";-fx-background-radius:10;-fx-border-color:" + BORDER + ";-fx-border-radius:10;");
+            card.setStyle(
+                "-fx-background-color:" + CARD + ";" +
+                "-fx-background-radius:10;" +
+                "-fx-border-color:" + BORDER + ";" +
+                "-fx-border-radius:10;"
+            );
             card.setPrefWidth(210);
             Label nm = new Label(d.getName());
             nm.setStyle("-fx-text-fill:" + TEXT + ";-fx-font-weight:bold;-fx-font-size:13px;");
@@ -159,17 +181,32 @@ public class ClinicApp extends Application {
         return root;
     }
 
-    private VBox statCard(String label, java.util.function.Supplier<String> valueGetter, String icon, String color) {
+    /** Creates a stat card. The first child is the icon+value Label. */
+    private VBox buildStatCard(String icon, String labelText, String color) {
         VBox card = new VBox(4);
         card.setPadding(new Insets(20));
         card.setPrefWidth(200);
-        card.setStyle("-fx-background-color:" + CARD + ";-fx-background-radius:12;-fx-border-color:" + color + ";-fx-border-radius:12;-fx-border-width:2;");
-        Label ico = new Label(icon + "  " + valueGetter.get());
+        card.setStyle(
+            "-fx-background-color:" + CARD + ";" +
+            "-fx-background-radius:12;" +
+            "-fx-border-color:" + color + ";" +
+            "-fx-border-radius:12;" +
+            "-fx-border-width:2;"
+        );
+        Label ico = new Label(icon + "  —");   // placeholder; refreshDashboard() fills the real value
         ico.setStyle("-fx-font-size:22px;-fx-text-fill:" + color + ";-fx-font-weight:bold;");
-        Label lbl = new Label(label);
+        Label lbl = new Label(labelText);
         lbl.setStyle("-fx-text-fill:" + SUBTEXT + ";-fx-font-size:12px;");
         card.getChildren().addAll(ico, lbl);
         return card;
+    }
+
+    /** Updates the mutable dashboard stat labels with current counts. */
+    private void refreshDashboard() {
+        if (statPatients  != null) statPatients.setText("👤  " + clinic.getPatients().size());
+        if (statScheduled != null) statScheduled.setText("📅  " + clinic.getScheduledAppointments().size());
+        if (statAllAppts  != null) statAllAppts.setText("📋  " + clinic.getAllAppointments().size());
+        if (statDoctors   != null) statDoctors.setText("🩺  " + clinic.getDoctors().size());
     }
 
     // ═══════════════════════════════════════════════════════
@@ -188,19 +225,19 @@ public class ClinicApp extends Application {
 
         TextField nameField    = field("Full name");
         TextField ageField     = field("Age");
-        TextField contactField = field("Phone or email");
+        TextField contactField = field("Phone number or email address");
 
         form.add(label("Name"),         0, 0); form.add(nameField,    1, 0);
         form.add(label("Age"),          0, 1); form.add(ageField,     1, 1);
         form.add(label("Contact Info"), 0, 2); form.add(contactField, 1, 2);
 
         ColumnConstraints c0 = new ColumnConstraints(120);
-        ColumnConstraints c1 = new ColumnConstraints(); c1.setHgrow(Priority.ALWAYS);
+        ColumnConstraints c1 = new ColumnConstraints();
+        c1.setHgrow(Priority.ALWAYS);
         form.getColumnConstraints().addAll(c0, c1);
 
-        Button addBtn = new Button("Add Patient");
+        Button addBtn  = new Button("Add Patient");
         addBtn.setStyle(BTN_STYLE);
-
         Label feedback = feedbackLabel();
 
         addBtn.setOnAction(e -> {
@@ -216,6 +253,7 @@ public class ClinicApp extends Application {
                     setSuccess(feedback, "Patient added successfully!");
                     nameField.clear(); ageField.clear(); contactField.clear();
                     refreshPatientRows();
+                    refreshDashboard(); // keep dashboard in sync
                 }
             } catch (NumberFormatException ex) {
                 setError(feedback, "Age must be a valid number.");
@@ -225,7 +263,6 @@ public class ClinicApp extends Application {
         HBox btnRow = new HBox(12, addBtn, feedback);
         btnRow.setAlignment(Pos.CENTER_LEFT);
 
-        // Table
         Label tTitle = sectionTitle("All Patients");
         TableView<PatientRow> table = patientTable();
         VBox.setVgrow(table, Priority.ALWAYS);
@@ -239,10 +276,10 @@ public class ClinicApp extends Application {
         tv.setStyle(TABLE_STYLE);
         tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         tv.getColumns().addAll(
-            col("ID",      "id",          80),
-            col("Name",    "name",        200),
-            col("Age",     "age",         80),
-            col("Contact", "contact",     300)
+            col("ID",      "id",      80),
+            col("Name",    "name",    200),
+            col("Age",     "age",     80),
+            col("Contact", "contact", 300)
         );
         styleTable(tv);
         return tv;
@@ -261,32 +298,29 @@ public class ClinicApp extends Application {
         form.setHgap(16); form.setVgap(14);
         form.setStyle("-fx-background-color:" + CARD + ";-fx-background-radius:12;-fx-padding:24;");
 
-        // Patient combo
-        ComboBox<String> patientCombo = new ComboBox<>();
-        patientCombo.setStyle(COMBO_STYLE);
+        // Patient combo — refreshed each time the dropdown opens
+        ComboBox<String> patientCombo = styledCombo();
         patientCombo.setMaxWidth(Double.MAX_VALUE);
-
-        // Doctor combo
-        ComboBox<String> doctorCombo = new ComboBox<>();
-        for (Doctor d : clinic.getDoctors()) doctorCombo.getItems().add(d.toString());
-        doctorCombo.setStyle(COMBO_STYLE);
-        doctorCombo.setMaxWidth(Double.MAX_VALUE);
-
-        TextField dtField = field("DD/MM/YYYY HH:MM");
-
-        // Refresh patient combo when tab is shown
         patientCombo.setOnShowing(e -> {
             patientCombo.getItems().clear();
             for (Patient p : clinic.getPatients())
                 patientCombo.getItems().add("[" + p.getId() + "] " + p.getName());
         });
 
-        form.add(label("Patient"),    0, 0); form.add(patientCombo, 1, 0);
-        form.add(label("Doctor"),     0, 1); form.add(doctorCombo,  1, 1);
-        form.add(label("Date & Time"),0, 2); form.add(dtField,      1, 2);
+        // Doctor combo — static list
+        ComboBox<String> doctorCombo = styledCombo();
+        for (Doctor d : clinic.getDoctors()) doctorCombo.getItems().add(d.toString());
+        doctorCombo.setMaxWidth(Double.MAX_VALUE);
+
+        TextField dtField = field("DD/MM/YYYY HH:MM");
+
+        form.add(label("Patient"),     0, 0); form.add(patientCombo, 1, 0);
+        form.add(label("Doctor"),      0, 1); form.add(doctorCombo,  1, 1);
+        form.add(label("Date & Time"), 0, 2); form.add(dtField,      1, 2);
 
         ColumnConstraints c0 = new ColumnConstraints(130);
-        ColumnConstraints c1 = new ColumnConstraints(); c1.setHgrow(Priority.ALWAYS);
+        ColumnConstraints c1 = new ColumnConstraints();
+        c1.setHgrow(Priority.ALWAYS);
         form.getColumnConstraints().addAll(c0, c1);
 
         Button bookBtn = new Button("Book Appointment");
@@ -295,11 +329,11 @@ public class ClinicApp extends Application {
 
         bookBtn.setOnAction(e -> {
             if (patientCombo.getValue() == null) { setError(feedback, "Please select a patient."); return; }
-            if (doctorCombo.getValue() == null)  { setError(feedback, "Please select a doctor."); return; }
-            String ptStr = patientCombo.getValue();
-            int patientId = Integer.parseInt(ptStr.substring(1, ptStr.indexOf(']')));
-            int doctorIdx = doctorCombo.getSelectionModel().getSelectedIndex();
-            String dt     = dtField.getText().trim();
+            if (doctorCombo.getValue()  == null) { setError(feedback, "Please select a doctor.");  return; }
+            String ptStr     = patientCombo.getValue();
+            int    patientId = Integer.parseInt(ptStr.substring(1, ptStr.indexOf(']')));
+            int    doctorIdx = doctorCombo.getSelectionModel().getSelectedIndex();
+            String dt        = dtField.getText().trim();
             String err = clinic.bookAppointment(patientId, doctorIdx, dt);
             if (err != null) {
                 setError(feedback, err);
@@ -309,6 +343,7 @@ public class ClinicApp extends Application {
                 doctorCombo.setValue(null);
                 dtField.clear();
                 refreshAppointmentRows();
+                refreshDashboard(); // keep dashboard in sync
             }
         });
 
@@ -328,13 +363,12 @@ public class ClinicApp extends Application {
 
         Label title = sectionTitle("All Appointments");
 
-        // Filter
+        // Filter bar
         HBox filterRow = new HBox(12);
         filterRow.setAlignment(Pos.CENTER_LEFT);
-        ComboBox<String> filterCombo = new ComboBox<>();
+        ComboBox<String> filterCombo = styledCombo();
         filterCombo.getItems().addAll("All", "Scheduled", "Cancelled");
         filterCombo.setValue("All");
-        filterCombo.setStyle(COMBO_STYLE);
         filterRow.getChildren().addAll(label("Show:"), filterCombo);
 
         TableView<AppointmentRow> table = appointmentTable();
@@ -342,7 +376,7 @@ public class ClinicApp extends Application {
 
         filterCombo.setOnAction(e -> {
             String f = filterCombo.getValue();
-            if (f.equals("All")) {
+            if ("All".equals(f)) {
                 table.setItems(appointmentRows);
             } else {
                 ObservableList<AppointmentRow> filtered = FXCollections.observableArrayList();
@@ -352,13 +386,14 @@ public class ClinicApp extends Application {
             }
         });
 
-        // Cancel / Reschedule panel
+        // ── Action panel ──────────────────────────────────────
         VBox actionBox = new VBox(14);
         actionBox.setStyle("-fx-background-color:" + CARD + ";-fx-background-radius:12;-fx-padding:20;");
 
         Label actTitle = new Label("Actions");
         actTitle.setStyle("-fx-font-size:15px;-fx-font-weight:bold;-fx-text-fill:" + TEXT + ";");
 
+        // Cancel row
         HBox cancelRow = new HBox(12);
         cancelRow.setAlignment(Pos.CENTER_LEFT);
         TextField cancelIdField = field("Appointment ID");
@@ -367,6 +402,7 @@ public class ClinicApp extends Application {
         cancelBtn.setStyle(BTN_DANGER);
         cancelRow.getChildren().addAll(label("ID:"), cancelIdField, cancelBtn);
 
+        // Reschedule row
         HBox reschedRow = new HBox(12);
         reschedRow.setAlignment(Pos.CENTER_LEFT);
         TextField reschedIdField = field("Appointment ID");
@@ -381,25 +417,38 @@ public class ClinicApp extends Application {
 
         cancelBtn.setOnAction(e -> {
             try {
-                int id = Integer.parseInt(cancelIdField.getText().trim());
+                int id  = Integer.parseInt(cancelIdField.getText().trim());
                 String err = clinic.cancelAppointment(id);
-                if (err != null) setError(feedback, err);
-                else { setSuccess(feedback, "Appointment #" + id + " cancelled."); cancelIdField.clear(); refreshAppointmentRows(); table.refresh(); }
+                if (err != null) {
+                    setError(feedback, err);
+                } else {
+                    setSuccess(feedback, "Appointment #" + id + " cancelled.");
+                    cancelIdField.clear();
+                    refreshAppointmentRows();
+                    refreshDashboard();
+                    table.refresh();
+                }
             } catch (NumberFormatException ex) { setError(feedback, "Invalid ID."); }
         });
 
         reschedBtn.setOnAction(e -> {
             try {
-                int id = Integer.parseInt(reschedIdField.getText().trim());
-                String dt = newDtField.getText().trim();
+                int    id  = Integer.parseInt(reschedIdField.getText().trim());
+                String dt  = newDtField.getText().trim();
                 String err = clinic.rescheduleAppointment(id, dt);
-                if (err != null) setError(feedback, err);
-                else { setSuccess(feedback, "Rescheduled to: " + dt); reschedIdField.clear(); newDtField.clear(); refreshAppointmentRows(); table.refresh(); }
+                if (err != null) {
+                    setError(feedback, err);
+                } else {
+                    setSuccess(feedback, "Rescheduled to: " + dt);
+                    reschedIdField.clear();
+                    newDtField.clear();
+                    refreshAppointmentRows();
+                    table.refresh();
+                }
             } catch (NumberFormatException ex) { setError(feedback, "Invalid ID."); }
         });
 
         actionBox.getChildren().addAll(actTitle, cancelRow, reschedRow, feedback);
-
         root.getChildren().addAll(title, filterRow, table, actionBox);
         return root;
     }
@@ -415,18 +464,17 @@ public class ClinicApp extends Application {
                 super.updateItem(item, empty);
                 if (empty || item == null) { setText(null); setStyle(""); return; }
                 setText(item);
-                if (item.equals("Scheduled"))
-                    setStyle("-fx-text-fill:" + ACCENT + ";-fx-font-weight:bold;");
-                else
-                    setStyle("-fx-text-fill:" + ACCENT2 + ";-fx-font-weight:bold;");
+                setStyle("Scheduled".equals(item)
+                    ? "-fx-text-fill:" + ACCENT  + ";-fx-font-weight:bold;"
+                    : "-fx-text-fill:" + ACCENT2 + ";-fx-font-weight:bold;");
             }
         });
 
         tv.getColumns().addAll(
-            col("Appt#",   "apptId",      60),
-            col("Patient", "patientName", 160),
-            col("Doctor",  "doctorName",  200),
-            col("DateTime","dateTime",    170),
+            col("Appt#",    "apptId",      60),
+            col("Patient",  "patientName", 160),
+            col("Doctor",   "doctorName",  200),
+            col("DateTime", "dateTime",    170),
             statusCol
         );
         styleTable(tv);
@@ -444,8 +492,7 @@ public class ClinicApp extends Application {
 
         HBox searchRow = new HBox(12);
         searchRow.setAlignment(Pos.CENTER_LEFT);
-        ComboBox<String> patientCombo = new ComboBox<>();
-        patientCombo.setStyle(COMBO_STYLE);
+        ComboBox<String> patientCombo = styledCombo();
         patientCombo.setPrefWidth(280);
         Button viewBtn = new Button("View History");
         viewBtn.setStyle(BTN_STYLE);
@@ -467,15 +514,21 @@ public class ClinicApp extends Application {
         historyList.setCellFactory(lv -> new ListCell<String>() {
             @Override protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty || item == null) { setText(null); setStyle("-fx-background-color:" + CARD + ";"); return; }
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("-fx-background-color:" + CARD + ";");
+                    return;
+                }
                 setText(item);
-                setStyle("-fx-text-fill:" + TEXT + ";-fx-background-color:" + CARD + ";-fx-font-size:13px;-fx-padding:8;");
+                setStyle(
+                    "-fx-text-fill:" + TEXT + ";" +
+                    "-fx-background-color:" + CARD + ";" +
+                    "-fx-font-size:13px;" +
+                    "-fx-padding:8;"
+                );
             }
         });
         VBox.setVgrow(historyList, Priority.ALWAYS);
-
-        Label noData = new Label("Select a patient to view their visit history.");
-        noData.setStyle("-fx-text-fill:" + SUBTEXT + ";-fx-font-size:13px;");
 
         viewBtn.setOnAction(e -> {
             historyList.getItems().clear();
@@ -507,7 +560,7 @@ public class ClinicApp extends Application {
         private final SimpleIntegerProperty id;
         private final SimpleStringProperty  name, age, contact;
         PatientRow(Patient p) {
-            id = new SimpleIntegerProperty(p.getId());
+            id      = new SimpleIntegerProperty(p.getId());
             name    = new SimpleStringProperty(p.getName());
             age     = new SimpleStringProperty(String.valueOf(p.getAge()));
             contact = new SimpleStringProperty(p.getContactInfo());
@@ -537,11 +590,11 @@ public class ClinicApp extends Application {
         public String getDoctorName()  { return doctorName.get(); }
         public String getDateTime()    { return dateTime.get(); }
         public String getStatus()      { return status.get(); }
-        public IntegerProperty apptIdProperty()       { return apptId; }
-        public StringProperty  patientNameProperty()  { return patientName; }
-        public StringProperty  doctorNameProperty()   { return doctorName; }
-        public StringProperty  dateTimeProperty()     { return dateTime; }
-        public StringProperty  statusProperty()       { return status; }
+        public IntegerProperty apptIdProperty()      { return apptId; }
+        public StringProperty  patientNameProperty() { return patientName; }
+        public StringProperty  doctorNameProperty()  { return doctorName; }
+        public StringProperty  dateTimeProperty()    { return dateTime; }
+        public StringProperty  statusProperty()      { return status; }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -581,6 +634,27 @@ public class ClinicApp extends Application {
         return tf;
     }
 
+    /** Creates a styled ComboBox with consistent dark-theme cell colours. */
+    private ComboBox<String> styledCombo() {
+        ComboBox<String> cb = new ComboBox<>();
+        cb.setStyle(COMBO_STYLE);
+        cb.setButtonCell(new ListCell<String>() {
+            @Override protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item);
+                setStyle("-fx-text-fill:" + TEXT + ";-fx-background-color:#1e3045;");
+            }
+        });
+        cb.setCellFactory(list -> new ListCell<String>() {
+            @Override protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : item);
+                setStyle("-fx-text-fill:" + TEXT + ";-fx-background-color:#1e3045;");
+            }
+        });
+        return cb;
+    }
+
     private Label feedbackLabel() {
         Label l = new Label();
         l.setStyle("-fx-font-size:13px;");
@@ -607,14 +681,13 @@ public class ClinicApp extends Application {
     }
 
     private <T> void styleTable(TableView<T> tv) {
-        tv.setStyle(TABLE_STYLE + "-fx-selection-bar:" + BORDER + ";-fx-selection-bar-non-focused:" + BORDER + ";");
+        tv.setStyle(TABLE_STYLE +
+            "-fx-selection-bar:" + BORDER + ";" +
+            "-fx-selection-bar-non-focused:" + BORDER + ";");
         tv.setPlaceholder(new Label("No data") {{
             setStyle("-fx-text-fill:" + SUBTEXT + ";-fx-font-size:13px;");
         }});
     }
 
-    // ══════════════════════
-    public static void main(String[] args) {
-        launch(args);
-    }
+    public static void main(String[] args) { launch(args); }
 }
